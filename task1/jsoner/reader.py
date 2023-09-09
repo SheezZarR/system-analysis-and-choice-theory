@@ -1,12 +1,14 @@
 import pandas
 
-from task1.reader import Reader
+from reader import Reader
 
 
-class JsonReader(Reader):
+class JSONReader(Reader):
 
     def __init__(self, filepath):
-        self.json = pandas.read_json(filepath)
+        self.dataframe = pandas.read_json(filepath)
+        print(self.dataframe)
 
-
-    # def get_at(self, ):
+    # ./ child::*[1] / child::[1]
+    def get_at(self, xpath: str, *args, **kwargs) -> str:
+        return self.dataframe.xpath(xpath)
