@@ -28,11 +28,8 @@ class Graph(CSVReader):
     with_grandchildren = set()
     with_siblings = set()
 
-    def __init__(self):
-        super().__init__(
-            os.path.join(os.getcwd(), "sample.csv")
-        )
-        print(self.csv)
+    def __init__(self, csv_string: str):
+        super().__init__(csv_string)
         self.nodes = {}
 
         for i in range(self.csv.shape[0]):
@@ -45,9 +42,6 @@ class Graph(CSVReader):
                 self.nodes[to_node] = Node(int(to_node), self.nodes[from_node])
 
             self.nodes[from_node].add_child(self.nodes[to_node])
-
-        for identifier, node in self.nodes.items():
-            print(f"{identifier} -> {node}")
 
     def gather_nodes_with_children(self) -> Set[Node]:
         self.with_children.clear()
@@ -102,17 +96,16 @@ class Graph(CSVReader):
         return self.with_grandchildren
 
 
-def main(*args, **kwargs):
-    topG = Graph()
-    print(
-        "\n",
-        f"С родителем {topG.gather_nodes_with_parent()}\n",
-        f"С детьми {topG.gather_nodes_with_children()}\n",
-        f"С сиблингами {topG.gather_nodes_with_siblings()}\n",
-        f"С правнуками {topG.gather_nodes_with_grandchildren()}\n",
-        f"Cо старшими предками {topG.gather_nodes_with_grandparents()}\n",
+def task(csv_string: str):
+    topG = Graph(csv_string)
+    return str(
+        f"\nС родителем {topG.gather_nodes_with_parent()}\n" +
+        f"С детьми {topG.gather_nodes_with_children()}\n" +
+        f"С сиблингами {topG.gather_nodes_with_siblings()}\n" +
+        f"С правнуками {topG.gather_nodes_with_grandchildren()}\n" +
+        f"Cо старшими предками {topG.gather_nodes_with_grandparents()}\n"
     )
 
 
 if __name__ == "__main__":
-    main()
+    print(task("1,2\n2,3\n1,5\n2,4"))
