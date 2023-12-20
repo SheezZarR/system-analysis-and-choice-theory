@@ -11,23 +11,24 @@ class Ranking:
     rank_list: List[Tuple[int, int]]
     num_of_elems: int = 0
 
+def unnest_list(input_list: List) -> List:
+    out_list = []
+    position = 0
+    for elem in input_list:
+        if isinstance(elem, list):
+            for sub_elem in elem:
+                out_list.append((sub_elem, position))
+
+        else:
+            out_list.append((elem, position))
+
+        position += 1
+        
+    return out_list
 
 def parse_json(json_str: Text) -> Ranking:
     parsed = json.loads(json_str)
-
-    num_of_elems = 0
-    rank_set = []
-
-    position = 0
-    for elem in parsed:
-        if isinstance(elem, list):
-            for sub_elem in elem:
-                rank_set.append((sub_elem, position))
-
-        else:
-            rank_set.append((elem, position))
-
-        position += 1
+    rank_set = unnest_list(parsed)
 
     num_of_elems = len(rank_set)
     relate_matrix = np.zeros((num_of_elems, num_of_elems))
@@ -58,7 +59,7 @@ def get_contradiction_kernel(ranking1: Ranking, ranking2: Ranking) -> tuple[list
 
     print("--------------------------------------------------")
     joined = np.add(multiplied_orig, multiplied_t)
-    print(f"Joined multiplicated matricies: \n{joined}")
+    print(f"Joined summed matrices: \n{joined}")
 
     print("--------------------------------------------------")
     culprits = np.argwhere(joined == 0)
@@ -92,12 +93,14 @@ def get_contradiction_kernel(ranking1: Ranking, ranking2: Ranking) -> tuple[list
 
 
 def check_column_uniqueness(column_id: int, ranking: Ranking):
-    column_sum = np.sum(ranking.relate_matrix[:10, column_id - 1])
+    """Column id is within 0 to 9 range."""
+
+    column_sum = np.sum(ranking.relate_matrix[:10, column_id])
     other_sums = set()
     other_sums.add(column_sum)
 
-    for i in range(10):
-        if i == column_id - 1:
+    for i in range(column_id, 10):
+        if i == column_id:
             continue
 
         new_sum = np.sum(ranking.relate_matrix[:10, i])
@@ -110,68 +113,85 @@ def check_column_uniqueness(column_id: int, ranking: Ranking):
     return column_id, True
 
 
-def guess_position(column_id, ranking1, ranking2) -> int:
+def get_ranking_elem(ind: int, ranking: Ranking) -> int:
+    print(ranking.rank_list)
+    flat = np.array(ranking.rank_list).flat
 
-    position, is_ok = check_column_uniqueness(column_id, ranking1)
+    print(f"Returning {flat[ind]}")
 
-    # known position in ranking 1
-    if is_ok:
-        return position
+    return 1
 
-    position, is_ok = check_column_uniqueness(column_id, ranking2)
 
-    # Known position in ranking 2
-    if is_ok:
-        return position - 1
 
-    # Position is not known in rankings but known after joining
-    return column_id - 1
+def guess_position(column_id, ranking1, ranking2) -> tuple[int, bool]:
+    """Column id is within 0 to 9 range."""
+    pos_in_rank = 0
+    
+    # edge case: last element 
+    # example: [1, [2, 4], 3], [1, [2, 3,] 4 ], contradiction: [[3, 4]]
+    # 
+    if column_id == 9:
+        if ranking1.rank_list[column_id][1] != ranking1.rank_list[column_id - 1][1]:
+            # position is guessable from 1
+            return ranking1.rank_list[column_id][0]
+        elif ranking2.rank_list[column_id][1] != ranking2.rank_list[column_id - 1][1]:
+            # position is guessable from 2
+            return ranking2.rank_list[column_id][0]
+        else:
+            return None
+    else:
+        if ranking1.rank_list[column_id][1] != ranking1.rank_list[column_id + 1][1]:
+            # position is guessable from 1
+            return ranking1.rank_list[column_id][0]
+        elif ranking2.rank_list[column_id][1] != ranking2.rank_list[column_id + 1][1]:
+            # position is guessable from 2
+            return ranking2.rank_list[column_id][0]
+        else:
+            # unguessable. The point is in contradiction matrix...
+            
+            return None
+
+
+def in_contradictions(value, contradictions):
+    for contr_value, shadow_position in contradictions:
+        if value == contr_value:
+            return True
+    return False
 
 
 def rank_with_contradictions(
-        contr: List[List[int]],
-        culprits: np.ndarray,
+        contradictions: List[List[int]],
+        joined: np.ndarray,
         ranking1: Ranking,
         ranking2: Ranking
 ) -> List:
     print("--------------------------------------------------")
-    positions_of_ok_points = []
-    not_conflicted_locations = []
+    non_contradicting = [0 for _ in range(10)]
+    unnested_contradictions = unnest_list(contradictions)
 
     for i in range(10):
-        if np.sum(culprits[:10, i]) == 11:
-            not_conflicted_locations.append(i + 1)
+        element = guess_position(i, ranking1, ranking2)
 
-    print(f"Not conflicted ranks: {not_conflicted_locations}")
+        if element and not in_contradictions(element, unnested_contradictions):
+            non_contradicting[i] = element
+        else:
+            pass
 
-    for rank in not_conflicted_locations:
-        guess = guess_position(rank, ranking1, ranking2)
-        print(f"Guessed position for: {rank} is {guess}")
-        positions_of_ok_points.append((rank, guess ))
+    print(f"Non contradicting elements order: {non_contradicting}")
+    out_ranking = []
+    contr_id_to_insert = 0
+    i = 0
+    while i < len(non_contradicting):
+        if non_contradicting[i]:
+            out_ranking.append([non_contradicting[i]])
+            i += 1
+        else:
+            out_ranking.append(contradictions[contr_id_to_insert])
+            i += len(contradictions[contr_id_to_insert])
+            contr_id_to_insert += 1
 
-    print(f"Ok points: {positions_of_ok_points}")
-
-    for point in positions_of_ok_points:
-        insert_position = point[1]
-        shadow_ind = 0
-        accumulated_ind = 0
-
-        for i in range(len(contr)):
-            if isinstance(contr[i], int):
-                accumulated_ind += 1
-                shadow_ind += 1
-                continue
-
-            if insert_position - (accumulated_ind + len(contr[i])) <= 0:
-                break
-
-            shadow_ind += 1
-            accumulated_ind += len(contr[i])
-
-        contr.insert(shadow_ind + 1, [point[0]])
-
-    print(f"Final answer: {contr}")
-    return contr
+    print(f"Final answer: {out_ranking}")
+    return out_ranking
 
 
 
@@ -201,4 +221,4 @@ def task(ranking_1_json: Text, ranking_2_json: Text) -> Text:
 
 
 if __name__ == "__main__":
-    task("[3,[1,4],2,6,[5,7,8],[9,10]]", "[[1,2],[3,4,5],6,7,9,[8,10]]")
+    task("[1,[2,3],4,[5,6,7],8,9,10]", "[[1,2],[3,4,5],6,7,9,[8,10]]")
